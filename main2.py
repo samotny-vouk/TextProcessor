@@ -9,7 +9,7 @@ import markdown2pdf
 from PyQt5 import QtWidgets
 from PyQt5.QtPrintSupport import QPrinter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit, QAction, QFileDialog, QInputDialog, QColorDialog, \
-    QFontDialog, QMessageBox, QVBoxLayout, QLabel, QLineEdit, QWidget, QPushButton, QComboBox
+    QFontDialog, QMessageBox, QVBoxLayout, QLabel, QLineEdit, QWidget, QPushButton, QComboBox, QDialog
 from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor, QDesktopServices, QColor, QBrush, QTextBlockFormat, \
     QTextDocumentFragment
 from PyQt5.QtCore import Qt, QUrl
@@ -27,6 +27,29 @@ DB_NAME = 'style.db'
 def link_clicked(url):
     QDesktopServices.openUrl(QUrl(url))
 
+
+class PageSizeDialog(QDialog):
+    def __init__(self, parent=None):
+        super(PageSizeDialog, self).__init__(parent)
+        self.setWindowTitle("Задать размер страницы")
+
+        self.layout = QVBoxLayout(self)
+
+        self.label_width = QLabel("Ширина страницы:")
+        self.layout.addWidget(self.label_width)
+        self.width_input = QLineEdit(self)
+        self.layout.addWidget(self.width_input)
+
+        self.label_height = QLabel("Высота страницы:")
+        self.layout.addWidget(self.label_height)
+        self.height_input = QLineEdit(self)
+        self.layout.addWidget(self.height_input)
+
+        self.ok_button = QPushButton("OK", self)
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addWidget(self.ok_button)
+
+        self.setLayout(self.layout)
 
 class SearchReplaceApp(QWidget):
     def __init__(self):
@@ -88,6 +111,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.textEdit = QTextEdit(self)
         self.setCentralWidget(self.textEdit)
+        self.page_width = 595  # По умолчанию для A4
+        self.page_height = 842  # По умолчанию для A4
+        self.current_page_number = 1
         # self.setGeometry(100, 100, 600, 400)
 
         self.doc = Document()
@@ -240,6 +266,68 @@ class MainWindow(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
+    def changePageSizeSolve(self):
+        dialog = PageSizeDialog()
+        if dialog.exec_() == QDialog.Accepted:
+            try:
+                new_width = float(dialog.width_input.text())
+                new_height = float(dialog.height_input.text())
+                self.page_width = new_width
+                self.page_height = new_height
+                QMessageBox.information(self, "Успех",
+                                        f"Размер страницы изменен на: {self.page_width} x {self.page_height}")
+            except ValueError:
+                QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите корректные значения для ширины и высоты.")
+
+    def getTextFromTextEdit(self):
+        return self.textEdit.toPlainText()
+
+    def getTextCursorContent(self):
+        cursor = self.textEdit.textCursor()
+        cursor.select(cursor.Document)
+        return cursor.selectedText()
+
+    def printCurrentPage(self):
+        total_pages = self.getTotalPages()
+
+        if self.current_page_number <= total_pages and self.current_page_number > 0:
+            page_text = self.getPageText(self.current_page_number)
+            print(f"Отображение страницы {self.current_page_number}/{total_pages}: {page_text}")
+        else:
+            print("Указанная страница вне диапазона.")
+
+    def getPageText(self, page_number):
+        text = self.getTextCursorContent()
+        lines = text.splitlines()
+
+        lines_per_page = 5
+        start = (page_number - 1) * lines_per_page
+        end = start + lines_per_page
+
+        page_lines = lines[start:end]
+        return "\n".join(page_lines)
+
+    def getTotalPages(self):
+        text = self.getTextCursorContent()
+        lines = text.splitlines()
+        lines_per_page = 5
+        return (len(lines) + lines_per_page - 1) // lines_per_page
+
+    def nextPage(self):
+        total_pages = self.getTotalPages()
+        if self.current_page_number < total_pages:
+            self.current_page_number += 1
+            self.printCurrentPage()
+        else:
+            print("Вы на последней странице.")
+
+    def previousPage(self):
+        if self.current_page_number > 1:
+            self.current_page_number -= 1
+            self.printCurrentPage()
+        else:
+            print("Вы на первой странице.")
+
     def load_styles(self):
         self.style_combo.clear()
         self.style_combo.addItems(["Normal", "Heading 1", "Heading 2"])
@@ -369,9 +457,6 @@ class MainWindow(QMainWindow):
         printer = QPrinter()
         printer.setPageSize(QPrinter.A4)
 
-    def changePageSizeSolve(self):
-        pass
-
     def addPageNumbers(self):
         text_document = self.textEdit.document()
         page_count = text_document.pageCount()
@@ -467,10 +552,8 @@ class MainWindow(QMainWindow):
         pdf_file = self.exportPdf()
         archive_name = "my_files"
 
-        # Проверяем наличие утилиты 7z
         if shutil.which('7z'):
             archive_format = "7z"
-            # Используем subprocess для создания 7z архива
             command = ['7z', 'a', f"{archive_name}.{archive_format}", pdf_file]
             subprocess.run(command, check=True)
         elif shutil.which('zip'):
