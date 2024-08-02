@@ -1,5 +1,7 @@
 import os
+import shutil
 import sqlite3
+import subprocess
 import sys
 
 import markdown
@@ -119,7 +121,7 @@ class MainWindow(QMainWindow):
         self.exportMenu.addAction(self.exportTxtAction)
 
         self.exportZipAction = QAction("ZIP", self)
-        self.exportZipAction.triggered.connect(self.exportZip)
+        self.exportZipAction.triggered.connect(self.create_archive)
         self.exportMenu.addAction(self.exportZipAction)
 
         self.fileMenu.addSeparator()
@@ -438,6 +440,7 @@ class MainWindow(QMainWindow):
             # print(f"Markdown-текст: {markdown_text}")
             html = HTML(string=markdown_text)
             html.write_pdf(fileName)
+        return fileName
 
     def exportTxt(self):
         options = QFileDialog.Options()
@@ -458,16 +461,35 @@ class MainWindow(QMainWindow):
             markdown_text = markdown.markdown(html_text)
             with open(fileName, 'w', encoding='utf-8') as f:
                 f.write(markdown_text)
+        return fileName
 
-    def exportZip(self):
-        options = QFileDialog.Options()
-        options |= QFileDialog.DontUseNativeDialog
-        fileName, _ = QFileDialog.getSaveFileName(self, "Экспорт в ZIP", "",
-                                                  "ZIP (*.zip);;Все файлы (*)",
-                                                  options=options)
-        if fileName:
-            with zipfile.ZipFile(fileName, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                zipf.write(self.currentFile, arcname=self.currentFile.split('/')[-1])
+    def create_archive(self):
+        pdf_file = self.exportPdf()
+        archive_name = "my_files"
+
+        # Проверяем наличие утилиты 7z
+        if shutil.which('7z'):
+            archive_format = "7z"
+            # Используем subprocess для создания 7z архива
+            command = ['7z', 'a', f"{archive_name}.{archive_format}", pdf_file]
+            subprocess.run(command, check=True)
+        elif shutil.which('zip'):
+            archive_format = "zip"
+            shutil.make_archive(
+                base_name=archive_name,
+                format=archive_format,
+                root_dir=os.path.dirname(pdf_file),
+                base_dir=os.path.basename(os.path.dirname(pdf_file)),
+                owner=None,
+                group=None,
+                logger=None,
+                dry_run=False,
+                verbose=False
+            )
+        else:
+            raise RuntimeError("Нет доступного формата архива (7z, zip)")
+
+        print(f"Архив {archive_name}.{archive_format} создан успешно!")
 
     def convertDocxToPdf(self, docx_file, pdf_file):
         try:
