@@ -4,7 +4,8 @@ from PyQt5 import QtWidgets
 from PyQt5.QtPrintSupport import QPrinter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit, QAction, QFileDialog, QInputDialog, QColorDialog, \
     QFontDialog, QMessageBox, QVBoxLayout, QLabel, QLineEdit, QWidget, QPushButton, QComboBox
-from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor, QDesktopServices, QColor, QBrush, QTextBlockFormat
+from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor, QDesktopServices, QColor, QBrush, QTextBlockFormat, \
+    QTextDocumentFragment
 from PyQt5.QtCore import Qt, QUrl
 from docx import Document
 import zipfile
@@ -178,7 +179,7 @@ class MainWindow(QMainWindow):
         self.outdentAction.triggered.connect(self.applyOutdent)
         self.formatMenu.addAction(self.outdentAction)
 
-        self.lineSpacingAction = QAction("&Интервал между строками", self)
+        self.lineSpacingAction = QAction("&Надстрочный интервал", self)
         self.lineSpacingAction.triggered.connect(self.changeLineSpacing)
         self.formatMenu.addAction(self.lineSpacingAction)
 
@@ -195,6 +196,10 @@ class MainWindow(QMainWindow):
         self.pageNumber = QAction('Нумерация страниц')
         self.pageNumber.triggered.connect(self.addPageNumbers)
         self.solveMenu.addAction(self.pageNumber)
+
+        self.aligning = QAction('Центрирование')
+        self.aligning.triggered.connect(self.changeAlign)
+        self.solveMenu.addAction(self.aligning)
 
         self.pageBreak = QAction('Разрыв страницы')
         self.pageBreak.triggered.connect(self.addPageBreak)
@@ -554,9 +559,31 @@ class MainWindow(QMainWindow):
             cursor.setBlockFormat(block_format)
 
     def changeLineSpacing(self):
-        spacing, ok = QInputDialog.getDouble(self, "Интервал между строками", "Введите интервал:", 1.0, 0.1, 3.0, 2)
+        spacing, ok = QInputDialog.getDouble(self, "Интервал между строками", "Введите интервал:", 1.0, 0.1, 10.0, 2)
         if ok:
-            self.textEdit.setLineSpacing(spacing)
+            cursor = self.textEdit.textCursor()
+            block_format = QTextBlockFormat()
+            font = self.textEdit.currentFont()
+            font_height = font.pointSize()
+            line_height = font_height * 1.5 * spacing
+            block_format.setLineHeight(line_height, QTextBlockFormat.FixedHeight)
+            cursor.setBlockFormat(block_format)
+
+    def changeAlign(self):
+        items = ("Слева", "По центру", "Справа", "По ширине")
+        item, ok = QInputDialog.getItem(self, "", "Расположение:", items, 0, False)
+
+        if ok and item:
+            if item == "Слева":
+                alignment = Qt.AlignLeft
+            elif item == "По центру":
+                alignment = Qt.AlignCenter
+            elif item == "Справа":
+                alignment = Qt.AlignRight
+            elif item == "По ширине":
+                alignment = Qt.AlignJustify
+
+            self.textEdit.setAlignment(alignment)
 
     def chooseBackgroundColor(self):
         color = QColorDialog.getColor()
