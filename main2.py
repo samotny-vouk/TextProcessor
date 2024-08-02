@@ -51,6 +51,7 @@ class PageSizeDialog(QDialog):
 
         self.setLayout(self.layout)
 
+
 class SearchReplaceApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -127,10 +128,6 @@ class MainWindow(QMainWindow):
         self.saveAction = QAction("&Сохранить TXT", self)
         self.saveAction.triggered.connect(self.saveFile)
         self.fileMenu.addAction(self.saveAction)
-
-        # self.saveAsAction = QAction("Сохранить как...", self)
-        # self.saveAsAction.triggered.connect(self.saveFileAs)
-        # self.fileMenu.addAction(self.saveAsAction)
 
         self.exportMenu = self.fileMenu.addMenu("Экспорт")
 
