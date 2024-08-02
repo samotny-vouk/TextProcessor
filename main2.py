@@ -1,5 +1,9 @@
+import os
 import sqlite3
 import sys
+
+import markdown
+import markdown2pdf
 from PyQt5 import QtWidgets
 from PyQt5.QtPrintSupport import QPrinter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit, QAction, QFileDialog, QInputDialog, QColorDialog, \
@@ -8,8 +12,12 @@ from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor, QDesktopServices, Q
     QTextDocumentFragment
 from PyQt5.QtCore import Qt, QUrl
 from docx import Document
+from docx2pdf import convert
 import zipfile
 import re
+
+from weasyprint import HTML
+
 text = ""
 DB_NAME = 'style.db'
 
@@ -88,19 +96,23 @@ class MainWindow(QMainWindow):
         self.openAction.triggered.connect(self.openFile)
         self.fileMenu.addAction(self.openAction)
 
-        self.saveAction = QAction("&Сохранить", self)
+        self.saveAction = QAction("&Сохранить TXT", self)
         self.saveAction.triggered.connect(self.saveFile)
         self.fileMenu.addAction(self.saveAction)
 
-        self.saveAsAction = QAction("Сохранить как...", self)
-        self.saveAsAction.triggered.connect(self.saveFileAs)
-        self.fileMenu.addAction(self.saveAsAction)
+        # self.saveAsAction = QAction("Сохранить как...", self)
+        # self.saveAsAction.triggered.connect(self.saveFileAs)
+        # self.fileMenu.addAction(self.saveAsAction)
 
         self.exportMenu = self.fileMenu.addMenu("Экспорт")
 
         self.exportPdfAction = QAction("PDF", self)
         self.exportPdfAction.triggered.connect(self.exportPdf)
         self.exportMenu.addAction(self.exportPdfAction)
+
+        self.exportHTMLAction = QAction("HTML", self)
+        self.exportHTMLAction.triggered.connect(self.exportHtml)
+        self.exportMenu.addAction(self.exportHTMLAction)
 
         self.exportTxtAction = QAction("TXT", self)
         self.exportTxtAction.triggered.connect(self.exportTxt)
@@ -417,13 +429,15 @@ class MainWindow(QMainWindow):
     def exportPdf(self):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        fileName, _ = QFileDialog.getSaveFileName(self, "Экспорт в PDF", "",
-                                                  "PDF (*.pdf);;Все файлы (*)",
+        fileName, _ = QFileDialog.getSaveFileName(self, "Экспорт в PDF", "", "PDF (*.pdf);;Все файлы (*)",
                                                   options=options)
         if fileName:
-            docx_file = fileName.replace('.pdf', '.docx')
-            self.doc.save(docx_file)
-            self.convertDocxToPdf(docx_file, fileName)
+            # print(f"Имя файла: {fileName}")
+            html_text = self.textEdit.toHtml()
+            markdown_text = markdown.markdown(html_text)
+            # print(f"Markdown-текст: {markdown_text}")
+            html = HTML(string=markdown_text)
+            html.write_pdf(fileName)
 
     def exportTxt(self):
         options = QFileDialog.Options()
@@ -434,6 +448,16 @@ class MainWindow(QMainWindow):
         if fileName:
             with open(fileName, 'w', encoding='utf-8') as f:
                 f.write(self.textEdit.toPlainText())
+
+    def exportHtml(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        fileName, _ = QFileDialog.getSaveFileName(self, "Экспорт в HTML", "", "HTML (*.html);;Все файлы (*)", options=options)
+        if fileName:
+            html_text = self.textEdit.toHtml()
+            markdown_text = markdown.markdown(html_text)
+            with open(fileName, 'w', encoding='utf-8') as f:
+                f.write(markdown_text)
 
     def exportZip(self):
         options = QFileDialog.Options()
