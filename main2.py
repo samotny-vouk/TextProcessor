@@ -4,8 +4,7 @@ from PyQt5 import QtWidgets
 from PyQt5.QtPrintSupport import QPrinter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit, QAction, QFileDialog, QInputDialog, QColorDialog, \
     QFontDialog, QMessageBox, QVBoxLayout, QLabel, QLineEdit, QWidget, QPushButton, QComboBox
-from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor, QDesktopServices, QColor, QBrush, QTextBlockFormat, \
-    QTextImageFormat, QPixmap
+from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor, QDesktopServices, QColor, QBrush, QTextBlockFormat
 from PyQt5.QtCore import Qt, QUrl
 from docx import Document
 import zipfile
@@ -16,32 +15,6 @@ DB_NAME = 'style.db'
 
 def link_clicked(url):
     QDesktopServices.openUrl(QUrl(url))
-
-
-class MyTextEdit(QTextEdit):
-    def __init__(self):
-        super().__init__()
-        self.current_page = 1
-        self.pages = []
-
-    def addPageBreak(self):
-        cursor = self.textCursor()
-        block_format = QTextBlockFormat()
-        block_format.setPageBreakPolicy(QTextBlockFormat.PageBreak_AlwaysBefore)
-
-        cursor.insertBlock(block_format)  # Создание разрыва страницы
-        self.pages.append(('Page {}'.format(self.current_page),
-                           cursor.block().text()))  # Сохранение текста на странице
-        self.current_page += 1
-
-        # Пример добавления номера страницы
-        cursor.insertText(f"\nPage {self.current_page}\n")
-
-    def updateDocument(self):
-        self.clear()
-        for page_num, text in self.pages:
-            self.append(text)
-            self.append(page_num)  # Добавление номера страницы
 
 
 class SearchReplaceApp(QWidget):
@@ -387,17 +360,10 @@ class MainWindow(QMainWindow):
             self.textEdit.append(f"Страница {page + 1} из {page_count}")
 
     def addPageBreak(self):
-        text_edit = MyTextEdit()
-        text_edit.setPlainText(self.textEdit.toPlainText())
-        text_edit.addPageBreak()
-        text_edit.updateDocument()
-        text_edit.show()
-
-    def updateDocument(self):
-        self.clear()
-        for page_num, text in self.pages:
-            self.append(text)
-            self.append(page_num)
+        cursor = self.textEdit.textCursor()
+        block_format = QTextBlockFormat()
+        block_format.setPageBreakPolicy(QTextBlockFormat.PageBreak_AlwaysBefore)  # Исправлено здесь
+        cursor.insertBlock(block_format)
 
     def insertImage(self):
         options = QFileDialog.Options()
