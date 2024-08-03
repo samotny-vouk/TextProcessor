@@ -9,10 +9,11 @@ import markdown2pdf
 from PyQt5 import QtWidgets
 from PyQt5.QtPrintSupport import QPrinter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit, QAction, QFileDialog, QInputDialog, QColorDialog, \
-    QFontDialog, QMessageBox, QVBoxLayout, QLabel, QLineEdit, QWidget, QPushButton, QComboBox, QDialog
+    QFontDialog, QMessageBox, QVBoxLayout, QLabel, QLineEdit, QWidget, QPushButton, QComboBox, QDialog, QSplitter, \
+    QSizePolicy
 from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor, QDesktopServices, QColor, QBrush, QTextBlockFormat, \
     QTextDocumentFragment
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import Qt, QUrl, QSizeF
 from docx import Document
 from docx2pdf import convert
 import zipfile
@@ -111,9 +112,12 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.textEdit = QTextEdit(self)
+        self.textEdit.setLineWrapMode(QTextEdit.NoWrap)
         self.setCentralWidget(self.textEdit)
-        self.page_width = 595  # По умолчанию для A4
-        self.page_height = 842  # По умолчанию для A4
+        # self.textEdit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+
+        self.page_width = 595
+        self.page_height = 842
         self.current_page_number = 1
         # self.setGeometry(100, 100, 600, 400)
 
@@ -250,6 +254,10 @@ class MainWindow(QMainWindow):
         self.apply_style_button = QPushButton("Apply Style", self)
         self.add_style_button = QPushButton("Add Custom Style", self)
 
+        self.page_number_label = QLabel(self)
+        self.page_number_label.setAlignment(Qt.AlignRight)
+        self.textEdit.textChanged.connect(self.getTotalPages)
+
         self.apply_style_button.clicked.connect(self.applyStyle)
         self.add_style_button.clicked.connect(self.addCustomStyle)
 
@@ -258,73 +266,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.apply_style_button)
         layout.addWidget(self.add_style_button)
         layout.addWidget(self.textEdit)
+        layout.addWidget(self.page_number_label)
 
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+        central_widget = QWidget(self)
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
 
-    def changePageSizeSolve(self):
-        dialog = PageSizeDialog()
-        if dialog.exec_() == QDialog.Accepted:
-            try:
-                new_width = float(dialog.width_input.text())
-                new_height = float(dialog.height_input.text())
-                self.page_width = new_width
-                self.page_height = new_height
-                QMessageBox.information(self, "Успех",
-                                        f"Размер страницы изменен на: {self.page_width} x {self.page_height}")
-            except ValueError:
-                QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите корректные значения для ширины и высоты.")
-
-    def getTextFromTextEdit(self):
-        return self.textEdit.toPlainText()
-
-    def getTextCursorContent(self):
-        cursor = self.textEdit.textCursor()
-        cursor.select(cursor.Document)
-        return cursor.selectedText()
-
-    def printCurrentPage(self):
-        total_pages = self.getTotalPages()
-
-        if self.current_page_number <= total_pages and self.current_page_number > 0:
-            page_text = self.getPageText(self.current_page_number)
-            print(f"Отображение страницы {self.current_page_number}/{total_pages}: {page_text}")
-        else:
-            print("Указанная страница вне диапазона.")
-
-    def getPageText(self, page_number):
-        text = self.getTextCursorContent()
-        lines = text.splitlines()
-
-        lines_per_page = 5
-        start = (page_number - 1) * lines_per_page
-        end = start + lines_per_page
-
-        page_lines = lines[start:end]
-        return "\n".join(page_lines)
-
-    def getTotalPages(self):
-        text = self.getTextCursorContent()
-        lines = text.splitlines()
-        lines_per_page = 5
-        return (len(lines) + lines_per_page - 1) // lines_per_page
-
-    def nextPage(self):
-        total_pages = self.getTotalPages()
-        if self.current_page_number < total_pages:
-            self.current_page_number += 1
-            self.printCurrentPage()
-        else:
-            print("Вы на последней странице.")
-
-    def previousPage(self):
-        if self.current_page_number > 1:
-            self.current_page_number -= 1
-            self.printCurrentPage()
-        else:
-            print("Вы на первой странице.")
-
+# стили по умолчанию и пользовательские
     def load_styles(self):
         self.style_combo.clear()
         self.style_combo.addItems(["Normal", "Heading 1", "Heading 2"])
@@ -438,11 +386,11 @@ class MainWindow(QMainWindow):
                     self.show_error("Invalid alignment value selected.")
 
             if ok:
-                self.saveStyleToDB(style_name, font_size, font_weight, font_italic, font_underline, font_color,
+                self.saveStyleToDb(style_name, font_size, font_weight, font_italic, font_underline, font_color,
                                    font_family, align)
                 self.load_styles()
 
-    def saveStyleToDB(self, style_name, font_size, font_weight, font_italic, font_underline, font_color, font_family, alignment):
+    def saveStyleToDb(self, style_name, font_size, font_weight, font_italic, font_underline, font_color, font_family, alignment):
         connection = sqlite3.connect(DB_NAME)
         cursor = connection.cursor()
         cursor.execute("INSERT OR REPLACE INTO style (name, font_size, font_weight, font_italic, font_underline, font_color, font_family, alignment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -450,65 +398,24 @@ class MainWindow(QMainWindow):
         connection.commit()
         connection.close()
 
-    def changePageSizeA4(self):
-        printer = QPrinter()
-        printer.setPageSize(QPrinter.A4)
-
-    def addPageNumbers(self):
-        text_document = self.textEdit.document()
-        page_count = text_document.pageCount()
-        for page in range(page_count):
-            self.textEdit.append(f"Страница {page + 1} из {page_count}")
-
-    def addPageBreak(self):
+# предположительно нужная функция
+    def getTextCursorContent(self):
         cursor = self.textEdit.textCursor()
-        block_format = QTextBlockFormat()
-        block_format.setPageBreakPolicy(QTextBlockFormat.PageBreak_AlwaysBefore)  # Исправлено здесь
-        cursor.insertBlock(block_format)
+        cursor.select(cursor.Document)
+        return cursor.selectedText()
 
-    def insertImage(self):
-        options = QFileDialog.Options()
-        filePath, _ = QFileDialog.getOpenFileName(self, "Выбрать изображение", "",
-                                                  "Images (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
-        if filePath:
-            self.textEdit.insertHtml(f'<img src="{filePath}" alt="Image" width="300"/>')
-
-    def insertLink(self):
-        cursor = self.textEdit.textCursor()
-        selected_text = cursor.selectedText()
-
-        if not selected_text:
-            selected_text = cursor.block().text()
-            cursor.setPosition(cursor.block().position())
-            cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
-
-        link, ok = QInputDialog.getText(self, 'Вставить ссылку', 'Введите URL:')
-        url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
-
-        if ok and url_pattern.match(link):
-            char_format = cursor.charFormat()
-            char_format.setForeground(Qt.blue)
-            char_format.setFontUnderline(True)
-
-            cursor.mergeCharFormat(char_format)
-            cursor.insertHtml(f'<a href="{link}">{selected_text}</a>')
-        else:
-            QMessageBox.warning(self, "Ошибка", "Введенный URL некорректен.")
-
-    def saveFileAs(self):
-        options = QFileDialog.Options()
-        options |= QFileDialog.DontUseNativeDialog
-        fileName, _ = QFileDialog.getSaveFileName(self, "Сохранить как...", "",
-                                                  "Документ Word (*.docx);;Текстовый файл (*.txt);;Все файлы (*)",
-                                                  options=options)
+# функции к меню Файл
+    def openFile(self):
+        fileName = QFileDialog.getOpenFileName(self, "Открыть файл", "", "Текстовые файлы (*.txt);;Все файлы (*)")[0]
         if fileName:
-            self.currentFile = fileName
-            self.saveDocument(fileName)
+            with open(fileName, 'r', encoding='utf-8') as file:
+                self.textEdit.setText(file.read())
 
-    def saveDocument(self, fileName):
-        text = self.textEdit.toHtml()
-        self.doc.add_paragraph(text)
-        self.doc.save(fileName)
+    def saveFile(self):
+        fileName = QFileDialog.getSaveFileName(self, "Сохранить файл", "", "Текстовые файлы (*.txt);;Все файлы (*)")[0]
+        if fileName:
+            with open(fileName, 'w', encoding='utf-8') as file:
+                file.write(self.textEdit.toPlainText())
 
     def exportPdf(self):
         options = QFileDialog.Options()
@@ -571,28 +478,7 @@ class MainWindow(QMainWindow):
 
         print(f"Архив {archive_name}.{archive_format} создан успешно!")
 
-    def convertDocxToPdf(self, docx_file, pdf_file):
-        try:
-            from docx2pdf import convert
-            convert(docx_file, pdf_file)
-        except ImportError:
-            QMessageBox.warning(self, "Ошибка",
-                                "Не установлен модуль docx2pdf. Установите его с помощью 'pip install docx2pdf'")
-        except AssertionError as e:
-            QMessageBox.warning(self, "Ошибка", f"Ошибка конвертации: {e}")
-
-    def openFile(self):
-        fileName = QFileDialog.getOpenFileName(self, "Открыть файл", "", "Текстовые файлы (*.txt);;Все файлы (*)")[0]
-        if fileName:
-            with open(fileName, 'r', encoding='utf-8') as file:
-                self.textEdit.setText(file.read())
-
-    def saveFile(self):
-        fileName = QFileDialog.getSaveFileName(self, "Сохранить файл", "", "Текстовые файлы (*.txt);;Все файлы (*)")[0]
-        if fileName:
-            with open(fileName, 'w', encoding='utf-8') as file:
-                file.write(self.textEdit.toPlainText())
-
+# функции к меню Правка
     def undo(self):
         try:
             self.textEdit.undo()
@@ -604,6 +490,36 @@ class MainWindow(QMainWindow):
             self.textEdit.redo()
         except:
             QMessageBox.warning(self, "Ошибка", f"Нет элементов для возвращения")
+
+# функции к меню Формат
+    def insertImage(self):
+        options = QFileDialog.Options()
+        filePath, _ = QFileDialog.getOpenFileName(self, "Выбрать изображение", "",
+                                                  "Images (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
+        if filePath:
+            self.textEdit.insertHtml(f'<img src="{filePath}" alt="Image" width="300"/>')
+
+    def insertLink(self):
+        cursor = self.textEdit.textCursor()
+        selected_text = cursor.selectedText()
+
+        if not selected_text:
+            selected_text = cursor.block().text()
+            cursor.setPosition(cursor.block().position())
+            cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+
+        link, ok = QInputDialog.getText(self, 'Вставить ссылку', 'Введите URL:')
+        url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+
+        if ok and url_pattern.match(link):
+            char_format = cursor.charFormat()
+            char_format.setForeground(Qt.blue)
+            char_format.setFontUnderline(True)
+
+            cursor.mergeCharFormat(char_format)
+            cursor.insertHtml(f'<a href="{link}">{selected_text}</a>')
+        else:
+            QMessageBox.warning(self, "Ошибка", "Введенный URL некорректен.")
 
     def setBold(self):
         cursor = self.textEdit.textCursor()
@@ -644,6 +560,15 @@ class MainWindow(QMainWindow):
         cursor.mergeCharFormat(fmt)
         self.textEdit.setTextCursor(cursor)
 
+    def changeFont(self):
+        font, ok = QFontDialog.getFont()
+        if ok:
+            cursor = self.textEdit.textCursor()
+            fmt = cursor.charFormat()
+            fmt.setFont(font)
+            cursor.setCharFormat(fmt)
+            self.textEdit.setTextCursor(cursor)
+
     def changeFontSize(self):
         fontSize, ok = QInputDialog.getInt(self, "Размер шрифта", "Введите размер:", 10, 1, 100)
         if ok:
@@ -655,19 +580,22 @@ class MainWindow(QMainWindow):
             cursor.mergeCharFormat(fmt)
             self.textEdit.setTextCursor(cursor)
 
-    def changeFont(self):
-        font, ok = QFontDialog.getFont()
-        if ok:
-            cursor = self.textEdit.textCursor()
-            fmt = cursor.charFormat()
-            fmt.setFont(font)
-            cursor.setCharFormat(fmt)
-            self.textEdit.setTextCursor(cursor)
-
     def changeTextColor(self):
         color = QColorDialog.getColor(self.textEdit.textColor())
         if color.isValid():
             self.textEdit.setTextColor(color)
+
+    def chooseBackgroundColor(self):
+        color = QColorDialog.getColor()
+        if color.isValid():
+            fmt = self.textEdit.textCursor().charFormat()
+            fmt.setBackground(QBrush(color))
+            self.textEdit.textCursor().setCharFormat(fmt)
+
+    def choosePageColor(self):
+        color = QColorDialog.getColor()
+        if color.isValid():
+            self.textEdit.setStyleSheet(f"background-color: {color.name()};")
 
     def applyIndent(self):
         cursor = self.textEdit.textCursor()
@@ -695,6 +623,86 @@ class MainWindow(QMainWindow):
             block_format.setLineHeight(line_height, QTextBlockFormat.FixedHeight)
             cursor.setBlockFormat(block_format)
 
+# функции к меню Параметры страницы
+    # а4
+    def changePageSizeA4(self):
+        printer = QPrinter()
+        printer.setPaperSize(QSizeF(210, 297), QPrinter.Millimeter)
+
+    # настроить
+    def changePageSizeSolve(self):
+        dialog = PageSizeDialog()
+        if dialog.exec_() == QDialog.Accepted:
+            try:
+                new_width = float(dialog.width_input.text())
+                new_height = float(dialog.height_input.text())
+                self.page_width = new_width
+                self.page_height = new_height
+                QMessageBox.information(self, "",
+                                        f"Размер страницы изменён на: {self.page_width} x {self.page_height}")
+            except ValueError:
+                QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите корректные значения для ширины и высоты.")
+
+    # нумерация
+    # def printCurrentPage(self):
+    #     total_pages = self.getTotalPages()
+    #
+    #     if self.current_page_number <= total_pages and self.current_page_number > 0:
+    #         page_text = self.getPageText(self.current_page_number)
+    #         print(f"Отображение страницы {self.current_page_number}/{total_pages}: {page_text}")
+    #     else:
+    #         print("Указанная страница вне диапазона.")
+
+    # def getPageText(self, page_number):
+    #     text = self.getTextCursorContent()
+    #     lines = text.splitlines()
+    #
+    #     lines_per_page = 5
+    #     start = (page_number - 1) * lines_per_page
+    #     end = start + lines_per_page
+    #
+    #     page_lines = lines[start:end]
+    #     return "\n".join(page_lines)
+
+    def getTotalPages(self):
+        text = self.textEdit.toPlainText()
+        page_height = self.page_height
+        line_height = 20
+
+        line_count = text.count('\n') + 1
+        total_pages = (line_count * line_height) // page_height + 1
+
+        cursor = self.textEdit.textCursor()
+        cursor_position = cursor.position()
+
+        lines_before_cursor = text[:cursor_position].count('\n') + 1
+        current_page = (lines_before_cursor * line_height) // page_height + 1
+        self.page_number_label.setText(f"Page {current_page} of {total_pages}")
+        # return total_pages
+
+    def addPageNumbers(self):
+        text_document = self.textEdit.document()
+        page_count = text_document.pageCount()
+        for page in range(page_count):
+            self.textEdit.append(f"Страница {page + 1} из {page_count}")
+
+    # def nextPage(self):
+    #     total_pages = self.getTotalPages()
+    #     if self.current_page_number < total_pages:
+    #         self.current_page_number += 1
+    #         self.printCurrentPage()
+    #     else:
+    #         print("Вы на последней странице.")
+
+    # def previousPage(self):
+    #     if self.current_page_number > 1:
+    #         self.current_page_number -= 1
+    #         self.printCurrentPage()
+    #     else:
+    #         print("Вы на первой странице.")
+
+    # центрирование
+
     def changeAlign(self):
         items = ("Слева", "По центру", "Справа", "По ширине")
         item, ok = QInputDialog.getItem(self, "", "Расположение:", items, 0, False)
@@ -711,17 +719,12 @@ class MainWindow(QMainWindow):
 
             self.textEdit.setAlignment(alignment)
 
-    def chooseBackgroundColor(self):
-        color = QColorDialog.getColor()
-        if color.isValid():
-            fmt = self.textEdit.textCursor().charFormat()
-            fmt.setBackground(QBrush(color))
-            self.textEdit.textCursor().setCharFormat(fmt)
-
-    def choosePageColor(self):
-        color = QColorDialog.getColor()
-        if color.isValid():
-            self.textEdit.setStyleSheet(f"background-color: {color.name()};")
+    # разрыв страницы
+    def addPageBreak(self):
+        cursor = self.textEdit.textCursor()
+        block_format = QTextBlockFormat()
+        block_format.setPageBreakPolicy(QTextBlockFormat.PageBreak_AlwaysBefore)  # Исправлено здесь
+        cursor.insertBlock(block_format)
 
 
 def toNext(WindowNext):
