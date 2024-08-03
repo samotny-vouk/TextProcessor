@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit, QAction, QFile
     QFontDialog, QMessageBox, QVBoxLayout, QLabel, QLineEdit, QWidget, QPushButton, QComboBox, QDialog, QSplitter, \
     QSizePolicy
 from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor, QDesktopServices, QColor, QBrush, QTextBlockFormat, \
-    QTextDocumentFragment
+    QTextDocumentFragment, QPainter
 from PyQt5.QtCore import Qt, QUrl, QSizeF
 from docx import Document
 from docx2pdf import convert
@@ -27,6 +27,36 @@ DB_NAME = 'style.db'
 
 def link_clicked(url):
     QDesktopServices.openUrl(QUrl(url))
+
+
+class NumberedTextEdit(QTextEdit):
+    def __init__(self, parent=None):
+        super(NumberedTextEdit, self).__init__(parent)
+
+    def paintEvent(self, event):
+        super(NumberedTextEdit, self).paintEvent(event)
+        self.drawLineNumbers()
+
+    def drawLineNumbers(self):
+        painter = QPainter(self.viewport())
+        fmt = self.fontMetrics()
+
+        line_count = self.document().blockCount()
+        numbers_width = fmt.width(str(line_count)) + 10
+
+        for i in range(line_count):
+            block = self.document().findBlockByNumber(i)
+            if block.isVisible():
+                line_number = i + 1
+                top_y = int(block.layout().boundingRect().top())
+                height = fmt.height()
+                text_width = int(block.layout().boundingRect().width())
+
+                painter.fillRect(0, top_y, numbers_width, height, Qt.white)
+                x_pos = text_width + 5
+
+                painter.drawText(x_pos, top_y, numbers_width, height,
+                                 Qt.AlignRight, str(line_number))
 
 
 class PageSizeDialog(QDialog):
@@ -111,8 +141,10 @@ class SearchReplaceApp(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        # self.textEdit = NumberedTextEdit(self)
+        # self.textEdit.document().setIndent(10)
         self.textEdit = QTextEdit(self)
-        self.textEdit.setLineWrapMode(QTextEdit.NoWrap)
+        # self.textEdit.setLineWrapMode(QTextEdit.NoWrap)
         self.setCentralWidget(self.textEdit)
         # self.textEdit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
